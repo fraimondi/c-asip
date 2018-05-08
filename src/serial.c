@@ -13,7 +13,7 @@ void *readFromSerial(void *someArgs) {
 
 
     unsigned char d;
-    ssize_t s=0;
+    ssize_t s;
 
 
     /* We need to read a character at a time

@@ -58,9 +58,13 @@ void asip_process_analog_values(char *message) {
 		end = strstr( start, "}" );
 		if ( end ) {
 			target = ( char * )malloc( end - start + 1 );
-			memcpy( target, start, end - start );
-			target[end - start] = '\0';
-			asip_log(TRACE,"asip_process_analog_values: the substring is %s\n",target);
+			if ( target == 0 ) {
+				asip_log(ERROR,"asip_process_analog_values: OUT OF MEMORY\n");
+			} else {
+				memcpy( target, start, end - start );
+				target[end - start] = '\0';
+				asip_log(TRACE,"asip_process_analog_values: the substring is %s\n",target);
+			}
 		} else {
 			asip_log(WARN,"asip_process_analog_values: I couldn't find a closing }.\n");
 		}
@@ -157,10 +161,14 @@ void asip_parse_incoming_message(char * message) {
 void asip_clear_lcd_screen() {
 	char *toSend;
 	toSend = (char *)malloc(sizeof(LCD_SERVICE)+1+sizeof(LCD_CLEAR)+1);
-	sprintf(toSend,"%c,%c\n",LCD_SERVICE,LCD_CLEAR);
-	asip_log(TRACE,"asip_clear_lcd_screen: sending %s\n",toSend);
-	writeToSerial(toSend);
-	free(toSend);
+	if ( toSend == 0 ) {
+		asip_log(ERROR,"asip_clear_lcd_screen: OUT OF MEMORY\n");
+	} else {
+		sprintf(toSend,"%c,%c\n",LCD_SERVICE,LCD_CLEAR);
+		asip_log(TRACE,"asip_clear_lcd_screen: sending %s\n",toSend);
+		writeToSerial(toSend);
+		free(toSend);
+	}
 }
 
 /* We get a string message and a line and we print it */
@@ -168,10 +176,14 @@ void asip_write_lcd_line(char *msg, unsigned short int line_number) {
 	char *toSend;
 	if ( (line_number < 5) && (line_number>=0)) {
 		toSend = (char *)malloc(sizeof(LCD_SERVICE)+1+sizeof(LCD_WRITE)+1+1+1+strlen(msg)+10);
-		sprintf(toSend,"%c,%c,%d,%s\n",LCD_SERVICE,LCD_WRITE,line_number,msg);
-		writeToSerial(toSend);
-		asip_log(TRACE,"asip_write_lcd_line: sending %s\n",toSend);
-		free(toSend);
+		if ( toSend == 0 ) {
+			asip_log(ERROR,"asip_write_lcd_line: OUT OF MEMORY\n");
+		} else {
+			sprintf(toSend,"%c,%c,%d,%s\n",LCD_SERVICE,LCD_WRITE,line_number,msg);
+			writeToSerial(toSend);
+			asip_log(TRACE,"asip_write_lcd_line: sending %s\n",toSend);
+			free(toSend);
+		}
 	} else {
 		asip_log(ERROR,"asip_write_lcd_line: invalid line number %d\n",line_number);
 	}
