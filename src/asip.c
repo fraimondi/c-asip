@@ -2,12 +2,45 @@
 #include "serial.h"
 #include "asip_log.h"
 
+
+/* A type for port data (for digital pin mapping). A port contains something like:
+- position 0 -> pin 5
+- position 1 -> pin 8,
+- ... etc.
+I assume no more than 16 pins per port, it should be more than enough
+*/
+typedef struct singleport_data {unsigned int singleport_data[16]; } singleport_data;
+
+// This is the actual array mapping a port to its mapping to pins.
+// Again, I assume at most 16 ports.
+static singleport_data port_mapping[16];
+
+/* A flag to make sure that digital ports have been mapped */
+
+static int digital_ports_mapped = 0;
+
+/* Just a function to compute log2 of int, used below
+ * (and copied from stackoverflow)
+ */
+unsigned int asip_log2( unsigned int x )
+{
+  unsigned int ans = 0 ;
+  while( x>>=1 ) ans++;
+  return ans ;
+}
+
 // two arrays to hold data received
 static short analog_io_pins[MAX_NUM_ANALOG_PINS]; // we only need values 0-1023, let's use a short
 static char digital_io_pins[MAX_NUM_DIGITAL_PINS]; // these can only be 0 or 1, let's use a char
 
 void asip_open(char *serialPort) {
 	open_port(serialPort); // call to serial port to open
+	while ( digital_ports_mapped == 0) {
+		asip_request_port_mapping();
+		usleep(1000000);
+	}
+	asip_log(DEBUG,"asip_open: digital ports set, exiting");
+
 }
 
 void asip_close() {
@@ -97,6 +130,104 @@ void asip_process_analog_values(char *message) {
 
 }
 
+/* A function to request port mapping. It should be used before trying
+ * to process port data.
+ */
+void asip_request_port_mapping() {
+	char *toSend;
+	toSend = (char *)malloc(sizeof(IO_SERVICE)+1+sizeof(PORT_MAPPING)+1);
+	if ( toSend == 0 ) {
+		asip_log(ERROR,"asip_request_port_mapping: OUT OF MEMORY\n");
+	} else {
+		sprintf(toSend,"%c,%c\n",IO_SERVICE,PORT_MAPPING);
+		asip_log(TRACE,"asip_request_port_mapping: sending %s\n",toSend);
+		writeToSerial(toSend);
+		free(toSend);
+	}
+}
+
+/*
+ * Processing port mapping is the most complicated part of ASIP. The initial message tells how to
+ map port bits to pins. Example message FROM Arduino:
+- @I,M,20,{4:1,4:2,4:4,4:8,4:10,4:20,4:40,4:80,2:1,2:2,2:4,2:8,2:10,2:20,3:1,3:2,3:4,3:8,3:10,3:20}
+(this is the mapping of pins: pin 0 is mapped to the first bit of port
+4, pin 1 to the second bit of port 4, etc. MAPPING IS IN HEX! so 20 is
+32. Take the conjunction of this with the port and you get the pin
+value)
+Here we set up this initial mapping. We use the hash map PORT-MAPPING-TABLE. This table
+maps a port number to another hash map. In this second hash map we map positions in the port
+(expressed as powers of 2, so 1 means position 0, 16 means position 5, etc.)
+Overall, this looks something like (see message above)
+PORT=4 ---> (POSITION=1 ---> PIN=0)
+            (POSITION=2 ---> PIN=1)
+PORT=2 ---> (POSITION=1 ---> PIN=8)
+             ...
+			(POSITION=16 ---> PIN=12)
+             ...
+and so on.
+See top of file for the declaration of singleport_data and port_mapping (an array
+of singleport_data mappings)
+*/
+void asip_process_port_mapping(char* message) {
+
+	char *target = NULL;
+	char *start, *end;
+
+	asip_log(DEBUG,"asip_process_port_mapping: entering\n");
+	start = strstr( message, "{" );
+	if ( start )	{
+		start += 1; // Ignore the "{" character
+		end = strstr( start, "}" );
+		if ( end ) {
+			target = ( char * )malloc( end - start + 1 );
+			if ( target == 0 ) {
+				asip_log(ERROR,"asip_process_port_mapping: OUT OF MEMORY\n");
+			} else {
+				memcpy( target, start, end - start );
+				target[end - start] = '\0';
+				asip_log(TRACE,"asip_process_port_mapping: the substring is %s\n",target);
+			}
+		} else {
+			asip_log(WARN,"asip_process_port_mapping: I couldn't find a closing }.\n");
+		}
+	} else {
+		asip_log(WARN,"asip_process_port_mapping: I couldn't find an opening {.\n");
+	}
+
+	// target contains the substring "4:1,4:2,4:4,4:8,4:10,4:20,[...],3:20": let's split and do some work
+	char *pairs = strtok (target, ",");
+	int pin_number=0; // the pin number is the position in the array.
+	while (pairs != NULL) {
+		char *p;
+		// FIXME: ADD A FEW MEMORY CHECKS!
+		int position; // the position of ":";
+		char *port;
+		p = strchr(pairs, ':');
+
+		position = strlen(pairs)-strlen(p);
+		port = (char *)malloc(position+1);
+		memcpy(port,pairs,position);
+		port[position] = '\0';
+		unsigned int bit_in_port = (int)strtol(p+1, NULL, 16);
+		// Now we need to find the actual bit for this. For instance, if bit_in_port is 0x20
+		// (32 in decimal), we should compute 5, which is log2 (function defined above).
+		asip_log(TRACE,"asip_process_port_mapping: setting bit %d of port %d to pin %d.\n",asip_log2(bit_in_port),atoi(port),pin_number);
+
+		port_mapping[atoi(port)].singleport_data[asip_log2(bit_in_port)] = pin_number;
+		analog_io_pins[atoi(port)] = atoi(p+1);
+
+		pairs = strtok (NULL, ",");
+		free(port);
+		pin_number++;
+	}
+
+	free(target);
+	digital_ports_mapped = 1;
+	asip_log(DEBUG,"asip_process_port_mapping: exiting\n");
+
+
+}
+
 /** A function to parse incoming event messages (those starting with @).
  * We need to look at the first character after @ to find out the appropriate
  * service and dispatch the message to the handler for that service.
@@ -110,6 +241,9 @@ void asip_handle_input_event(char *message) {
 			case IO_SERVICE:
 				// it's an IO service, let's call the appropriate handler
 				switch (message[3]) {
+					case PORT_MAPPING:
+						asip_process_port_mapping(message);
+						break;
 					case ANALOG_VALUE:
 						asip_process_analog_values(message);
 						break;

@@ -25,6 +25,7 @@
 #define AUTOEVENT_MESSAGE  'A'
 #define ASIP_EVENT  'e'
 #define IO_SERVICE  'I'
+#define PORT_MAPPING 'M'
 #define ANALOG_VALUE  'a'
 
 #define MOTOR_SERVICE  'M'
@@ -38,9 +39,9 @@
 #define LCD_WRITE  'W'
 #define LCD_CLEAR  'C'
 
-
 void asip_open(char *serialPort);
 void asip_close();
+void asip_request_port_mapping();
 void asip_enable_ir(int interval);
 void asip_enable_bumpers(int interval);
 int asip_analog_read(int pin);

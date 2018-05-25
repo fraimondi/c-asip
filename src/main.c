@@ -58,8 +58,6 @@ int main (int argc, char **argv) {
 	// Let's open the serial port:
 	asip_open(serialPort);
 
-	usleep(1000000);
-
 	//asip_clear_lcd_screen();
 	usleep(500000);
 	// And now a loop to print on screen the value of the 7th analog pin
