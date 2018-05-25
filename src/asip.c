@@ -2,6 +2,9 @@
 #include "serial.h"
 #include "asip_log.h"
 
+#define NUM_PORTS 16
+#define BITS_PER_PORT 16
+
 
 /* A type for port data (for digital pin mapping). A port contains something like:
 - position 0 -> pin 5
@@ -9,11 +12,11 @@
 - ... etc.
 I assume no more than 16 pins per port, it should be more than enough
 */
-typedef struct singleport_data {unsigned int singleport_data[16]; } singleport_data;
+typedef struct singleport_data {unsigned int singleport_data[BITS_PER_PORT]; } singleport_data;
 
 // This is the actual array mapping a port to its mapping to pins.
 // Again, I assume at most 16 ports.
-static singleport_data port_mapping[16];
+static singleport_data port_mapping[NUM_PORTS];
 
 /* A flag to make sure that digital ports have been mapped */
 
@@ -34,6 +37,13 @@ static short analog_io_pins[MAX_NUM_ANALOG_PINS]; // we only need values 0-1023,
 static char digital_io_pins[MAX_NUM_DIGITAL_PINS]; // these can only be 0 or 1, let's use a char
 
 void asip_open(char *serialPort) {
+	// Let's start by setting digital port mapping to -1
+	for (int i=0; i<NUM_PORTS;i++) {
+		for (int j=0;j<BITS_PER_PORT;j++) {
+			port_mapping[i].singleport_data[j] = -1;
+		}
+	}
+
 	open_port(serialPort); // call to serial port to open
 	while ( digital_ports_mapped == 0) {
 		asip_request_port_mapping();
@@ -223,6 +233,14 @@ void asip_process_port_mapping(char* message) {
 
 	free(target);
 	digital_ports_mapped = 1;
+	asip_log(TRACE,"asip_process_port_mapping: mapping done, this is the result:\n");
+	for (int i=0; i<NUM_PORTS; i++) {
+		asip_log(TRACE,"asip_process_port: Port %d = ",i);
+		for (int j=0; j<BITS_PER_PORT; j++) {
+			asip_log(TRACE,"%d, ",port_mapping[i].singleport_data[j]);
+		}
+		asip_log(TRACE,"\n");
+	}
 	asip_log(DEBUG,"asip_process_port_mapping: exiting\n");
 
 
