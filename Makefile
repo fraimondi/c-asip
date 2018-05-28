@@ -1,4 +1,4 @@
-TARGET   = c-asip
+ASIPLIB  = libasip.a
 
 CC       = gcc
 CFLAGS   = -Wall -I.
@@ -7,25 +7,38 @@ LFLAGS   = -Wall -I. -lm -lpthread
 
 SRCDIR   = src
 OBJDIR   = obj
+INCDIR   = includes
+EXADIR   = examples
+LIBDIR   = lib
 BINDIR   = bin
 
 SOURCES  := $(wildcard $(SRCDIR)/*.c)
-INCLUDES := $(wildcard $(SRCDIR)/*.h)
+INCLUDES := $(wildcard $(INCDIR)/*.h)
 OBJECTS  := $(SOURCES:$(SRCDIR)/%.c=$(OBJDIR)/%.o)
+EXAMPLES := $(wildcard $(EXADIR)/*.c)
 rm       = rm -f
 
-
-$(BINDIR)/$(TARGET): $(OBJECTS)
-	@$(LINKER) $(OBJECTS) $(LFLAGS) -o $@
-	@echo "Linking complete"
+all: $(OBJECTS) $(ASIPLIB) $(EXAMPLES:.c=)
 
 $(OBJECTS): $(OBJDIR)/%.o : $(SRCDIR)/%.c
 	@mkdir -p $(OBJDIR)
-	@mkdir -p $(BINDIR)
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) -I $(INCDIR) $(CFLAGS) -c $< -o $@
 	@echo "Compiled "$<" successfully"
 
-.PHONY: clean
+$(ASIPLIB): $(OBJECTS) 
+	@mkdir -p $(LIBDIR)
+	ar rcs $(LIBDIR)/$(ASIPLIB) $(OBJECTS)
+	@echo "Static library complete"
+
+$(EXAMPLES:.c=): $(OBJECTS) $(ASIPLIB)
+	@mkdir -p $(BINDIR)
+	@$(LINKER) -I $(INCDIR) $@.c -o $(BINDIR)/$(notdir $@) $(LIBDIR)/$(ASIPLIB) $(LFLAGS) 
+	@echo "Done $(BINDIR)/$(notdir $@)"
+	
+.PHONY: clean distclean
 clean:
-	@$(rm) $(OBJECTS) $(BINDIR)/$(TARGET)
-	@echo "Cleanup complete"
+	@$(rm) $(OBJECTS) $(LIBDIR)/$(ASIPLIB) $(BINDIR)/$(EXAMPLES:.c=)
+
+
+distclean: clean
+	rm -rf $(BINDIR) $(OBJDIR) $(LIBDIR)
