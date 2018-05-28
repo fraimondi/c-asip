@@ -6,6 +6,10 @@
 #include "asip_log.h"
 
 
+/* This example shows how to read the serial port from the command line.
+ * It also shows how to enable logging, writing to file.
+ */
+
 int main (int argc, char **argv) {
 
 	/* Here we parse the command line */
@@ -37,7 +41,7 @@ int main (int argc, char **argv) {
 	}
 
 	if (serialFlag < 0) {
-		fprintf(stderr,"You need to specify a port with -p");
+		fprintf(stderr,"You need to specify a port with -p\n");
 		exit(1);
 	}
 
@@ -46,41 +50,29 @@ int main (int argc, char **argv) {
 
 	/* end of command line parsing */
 
-	asip_set_log_level(TRACE); // Levels are: OFF, ERROR, WARN, INFO, DEBUG, TRACE
+	// You can set the log level with the following function:
+	// Levels are: OFF, ERROR, WARN, INFO, DEBUG, TRACE.
+	// The default level is ERROR.
+	// CAREFUL: TRACE is going to output a *lot* of information
+	asip_set_log_level(TRACE);
 
-	/* if you want to forward to a file, do the following
+
+	/* If you want to forward to a file, do the following
 	 * (don't forget to close, see below!)
 	 */
 	FILE *fptr;
 	fptr = fopen("asip.log","w"); // declare and open the file
-	//asip_set_output_stream(fptr); // and set output stream for log
+	asip_set_output_stream(fptr); // and set output stream for log
 
 	// Let's open the serial port:
 	asip_open(serialPort);
-
-	//asip_clear_lcd_screen();
-	usleep(500000);
-	asip_set_pin_mode(13, OUTPUT_MODE);
-	asip_set_pin_mode(10, INPUT_PULLUP_MODE);
-	// And now a loop to print on screen the value of the 7th analog pin
 	for (int i=0; i<10; i++) {
-//		asip_digital_write(13, 1);
+	// And now a loop to print on screen the value of pin 0 for 10 times
 		printf("Analog pin 0 is: %d\n",asip_analog_read(0));
-		char lcd_message[50];
-		sprintf(lcd_message,"Pin 0 = %d",asip_analog_read(0));
-		//asip_write_lcd_line(lcd_message,0);
-                //usleep(100000);
-		//asip_write_lcd_line("Test line 1\n",1);
 		usleep(1000000);
-		if (asip_digital_read(10) == 0) {
-			asip_digital_write(13, 0);
-			printf("Setting pin 13 to 0");
-		} else {
-			asip_digital_write(13, 1);
-			printf("Setting pin 13 to 1");
-		}
 	}
 
+	// Be gentle and close the serial port
 	asip_close();
 
 	/* Don't forget to close the file, if you opened it! */
