@@ -57,6 +57,28 @@ void asip_close() {
 	close_port(); // call to serial port to close
 }
 
+void asip_set_pin_mode(int pin, pinmodes_t mode) {
+	if ( pin < 0 || pin > MAX_NUM_DIGITAL_PINS) {
+		asip_log(ERROR,"asip_set_pin_mode: pin value %d not valid\n",pin);
+		return;
+	}
+	if ( mode < 0 || mode >= MAX_MODE_VAL) {
+		asip_log(ERROR,"asip_set_pin_mode: pin mode %d is not valid\n");
+		return;
+	} else {
+		char *toSend;
+		toSend = (char *)malloc(sizeof(IO_SERVICE)+1+sizeof(PIN_MODE)+8);
+		if ( toSend == 0 ) {
+			asip_log(ERROR,"asip_set_pin_mode: OUT OF MEMORY\n");
+		} else {
+			sprintf(toSend,"%c,%c,%d,%d\n",IO_SERVICE,PIN_MODE,pin,mode);
+			asip_log(TRACE,"asip_set_pin_mode: sending %s\n",toSend);
+			writeToSerial(toSend);
+			free(toSend);
+		}
+	}
+}
+
 void asip_enable_ir(int interval) {
 }
 
@@ -71,6 +93,36 @@ int asip_analog_read(int pin) {
 		asip_log(ERROR,"asip_analog_read: pin value %d not valid\n",pin);
 	}
 	return -1;
+}
+
+int asip_digital_read(int pin) {
+	if ( pin >= 0 && pin <= MAX_NUM_DIGITAL_PINS ) {
+		return digital_io_pins[pin];
+	} else {
+		asip_log(ERROR,"asip_digital_read: pin value %d not valid\n",pin);
+	}
+	return -1;
+}
+
+void asip_digital_write(int pin, int value) {
+	if ( pin < 0 || pin > MAX_NUM_DIGITAL_PINS) {
+		asip_log(ERROR,"asip_digital_write: pin value %d not valid\n",pin);
+		return;
+	}
+	if (!(value==1 || value==0)) {
+		asip_log(ERROR,"asip_digital_write: value %d not valid\n",value);
+		return;
+	}
+	char *toSend;
+	toSend = (char *)malloc(sizeof(IO_SERVICE)+1+sizeof(DIGITAL_WRITE)+8);
+	if ( toSend == 0 ) {
+		asip_log(ERROR,"asip_request_port_mapping: OUT OF MEMORY\n");
+	} else {
+		sprintf(toSend,"%c,%c,%d,%d\n",IO_SERVICE,DIGITAL_WRITE,pin,value);
+		asip_log(TRACE,"asip_digital_write: sending %s\n",toSend);
+		writeToSerial(toSend);
+		free(toSend);
+	}
 }
 
 void asip_set_motor(int motorId, int speed) {
@@ -218,7 +270,7 @@ void asip_process_port_mapping(char* message) {
 		port = (char *)malloc(position+1);
 		memcpy(port,pairs,position);
 		port[position] = '\0';
-		unsigned int bit_in_port = (int)strtol(p+1, NULL, 16);
+		unsigned int bit_in_port = (int)strtol(p+1, NULL, 16); // read as hexadecimal
 		// Now we need to find the actual bit for this. For instance, if bit_in_port is 0x20
 		// (32 in decimal), we should compute 5, which is log2 (function defined above).
 		asip_log(TRACE,"asip_process_port_mapping: setting bit %d of port %d to pin %d.\n",asip_log2(bit_in_port),atoi(port),pin_number);
@@ -246,6 +298,55 @@ void asip_process_port_mapping(char* message) {
 
 }
 
+
+/* This function processes data for digital input pins.
+ * See the description of asip_process_port_mapping for the underlying
+ * mechanism.  An incoming message has the form:
+ * @I,d,4,AB
+ * where 4 is the port number and AB is a hex number with the value
+ * of the pins in that port. For instance, AB in binary is  10101011
+ * meaning that the pin corresponding to position 1 in port 4 has value 1,
+ * pin corresponding to position 2 in port 4 has value 0, etc..
+ */
+void asip_process_port_data(char *message) {
+	asip_log(DEBUG,"asip_process_port_data: entering \n");
+
+	if (digital_ports_mapped == 0) {
+		asip_log(DEBUG,"asip_process_port_data: port mapping not yet available, ignoring port data\n");
+		return;
+	}
+	if (strlen(message)>6) {
+		int port = message[5]-'0'; // FIXME: assuming that port is a single digit
+		char *port_data = strrchr(message, ',');
+		if (port_data != NULL) {
+			unsigned int port_value = (unsigned int)strtol(port_data+1, NULL, 16);
+			asip_log(TRACE,"asip_process_port_data: the value for port %d is %d\n",port,port_value);
+
+			size_t num_values = sizeof(port_mapping[port].singleport_data)/sizeof(port_mapping[port].singleport_data[0]);
+			asip_log(TRACE,"asip_process_port_data: the size of the array for singleport_data is: %d\n",num_values);
+
+			for (int i=0; i<num_values;i++) {
+				if ( ((int) port_mapping[port].singleport_data[i]) > -1 ) { // if the pin is mapped...
+					if ( port_value & (1<<i) ) { // 1<<i is just 2^i
+						digital_io_pins[port_mapping[port].singleport_data[i]] = 1;
+						asip_log(TRACE,"asip_process_port_data: setting pin %d to 1\n",port_mapping[port].singleport_data[i]);
+					} else {
+						digital_io_pins[port_mapping[port].singleport_data[i]] = 0;
+						asip_log(TRACE,"asip_process_port_data: setting pin %d to 0\n",port_mapping[port].singleport_data[i]);
+					}
+				} else {
+					asip_log(TRACE,"asip_process_port_data: port mapping is %d\n",port_mapping[port].singleport_data[i]);
+				}
+			}
+
+		}
+	} else {
+		asip_log(WARN,"asip_process_port_data: I've received an incoming message of length < 7\n");
+	}
+	asip_log(DEBUG,"asip_process_port_data: exiting \n");
+}
+
+
 /** A function to parse incoming event messages (those starting with @).
  * We need to look at the first character after @ to find out the appropriate
  * service and dispatch the message to the handler for that service.
@@ -264,6 +365,9 @@ void asip_handle_input_event(char *message) {
 						break;
 					case ANALOG_VALUE:
 						asip_process_analog_values(message);
+						break;
+					case PORT_DATA:
+						asip_process_port_data(message);
 						break;
 
 					default:

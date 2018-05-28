@@ -18,6 +18,18 @@
 #define MAX_NUM_DIGITAL_PINS  72 // Max number of digital pins
 #define MAX_NUM_ANALOG_PINS   16 // Max number of analog pins
 
+typedef enum {
+	UNKNOWN_MODE,
+	INPUT_MODE,
+	INPUT_PULLUP_MODE,
+	OUTPUT_MODE,
+	ANALOG_MODE,
+	PWM_MODE,
+	RESERVED_MODE,
+	OTHER_SERVICE_MODE,
+	MAX_MODE_VAL // Used just for checking (see asip_set_pin_mode)
+} pinmodes_t;
+
 // A lot of ASIP constants
 #define EVENT_HANDLER '@'
 #define ERROR_MESSAGE_HEADER  '~'
@@ -27,6 +39,10 @@
 #define IO_SERVICE  'I'
 #define PORT_MAPPING 'M'
 #define ANALOG_VALUE  'a'
+#define DIGITAL_WRITE 'd'
+#define ANALOG_WRITE 'a'
+#define PORT_DATA 'd'
+#define PIN_MODE 'P'
 
 #define MOTOR_SERVICE  'M'
 #define SET_MOTOR_SPEED  'm'
@@ -42,9 +58,12 @@
 void asip_open(char *serialPort);
 void asip_close();
 void asip_request_port_mapping();
+void asip_set_pin_mode(int pin, pinmodes_t mode);
 void asip_enable_ir(int interval);
 void asip_enable_bumpers(int interval);
 int asip_analog_read(int pin);
+int asip_digital_read(int pin);
+void asip_digital_write(int pin, int value);
 void asip_set_motor(int motorId, int speed);
 int asip_get_bumper(int position);
 int asip_get_ir(int irID);

@@ -60,8 +60,11 @@ int main (int argc, char **argv) {
 
 	//asip_clear_lcd_screen();
 	usleep(500000);
+	asip_set_pin_mode(13, OUTPUT_MODE);
+	asip_set_pin_mode(10, INPUT_PULLUP_MODE);
 	// And now a loop to print on screen the value of the 7th analog pin
 	for (int i=0; i<10; i++) {
+//		asip_digital_write(13, 1);
 		printf("Analog pin 0 is: %d\n",asip_analog_read(0));
 		char lcd_message[50];
 		sprintf(lcd_message,"Pin 0 = %d",asip_analog_read(0));
@@ -69,6 +72,13 @@ int main (int argc, char **argv) {
                 //usleep(100000);
 		//asip_write_lcd_line("Test line 1\n",1);
 		usleep(1000000);
+		if (asip_digital_read(10) == 0) {
+			asip_digital_write(13, 0);
+			printf("Setting pin 13 to 0");
+		} else {
+			asip_digital_write(13, 1);
+			printf("Setting pin 13 to 1");
+		}
 	}
 
 	asip_close();
