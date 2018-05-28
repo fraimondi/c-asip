@@ -1,7 +1,3 @@
-#include <ctype.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
 #include "asip.h"
 #include "asip_log.h"
 

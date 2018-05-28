@@ -34,7 +34,7 @@ int main (int argc, char **argv) {
 			asip_digital_write(ledPin, curValue);
 		}
 		oldvalue = curValue;
-		usleep(5000); // Sleep a bit...
+		usleep(5000); // Sleep a bit, we don't want 100% CPU
 	}
 
 	// We'll never get here...
